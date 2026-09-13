@@ -1154,7 +1154,7 @@ setTimeout(()=>{
   setTimeout(()=>{
     $("welcome").remove();
     // Keep the flow separated: Welcome screen → Login → StudyForge app.
-    // Firebase's auth state handler controls whether the login gate or app is shown.
+    // Supabase's auth state handler controls whether the login gate or app is shown.
     if(!authUser){
       $("authGate").style.display="grid";
       $("app").style.display="none";
@@ -1163,22 +1163,24 @@ setTimeout(()=>{
 },3300);
 </script>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, updateProfile } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // StudyForge authentication — Supabase
+  // Only the public/publishable key belongs in a browser app.
+  const SUPABASE_URL = "https://ufnjklwmmofgeekzoxns.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_dc4G2WlRABE4FjItZMdO1Q_vzJ2bCgp";
+  const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY,
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    }
+  );
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBGfOgRSEUi52tvV1ymm_n4lDmkLBihZ0",
-    authDomain: "login-page-8a1b2.firebaseapp.com",
-    projectId: "login-page-8a1b2",
-    storageBucket: "login-page-8a1b2.firebasestorage.app",
-    messagingSenderId: "799045560129",
-    appId: "1:799045560129:web:8632665525939ae1ed63c0",
-    measurementId: "G-C05YP01TQM"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
   const gate = document.getElementById("authGate");
   const loading = document.getElementById("authLoading");
   const appRoot = document.getElementById("app");
@@ -1193,73 +1195,214 @@ setTimeout(()=>{
   const title = document.getElementById("authTitle");
   const sub = document.getElementById("authSub");
   const kicker = document.getElementById("authKicker");
-  let signup=false;
+
+  let signup = false;
+
+  // GitHub Pages works from a project sub-folder, so this automatically
+  // returns the user to the exact StudyForge page after email verification.
+  const redirectUrl = window.location.origin + window.location.pathname;
 
   function setMode(next){
-    signup=next; error.textContent="";
-    nameField.style.display=signup?"block":"none";
-    title.textContent=signup?"Start your desk.":"Welcome back.";
-    sub.textContent=signup?"Create your student account and start building your study history.":"Sign in to continue to your study desk.";
-    kicker.textContent=signup?"Create account":"Account access";
-    submit.textContent=signup?"Create account":"Sign in";
-    switchBtn.textContent=signup?"Already have an account? Sign in":"New here? Create an account";
-    forgotBtn.style.display=signup?"none":"block";
-    passInput.autocomplete=signup?"new-password":"current-password";
+    signup = !!next;
+    error.textContent = "";
+    nameField.style.display = signup ? "block" : "none";
+    title.textContent = signup ? "Start your desk." : "Welcome back.";
+    sub.textContent = signup
+      ? "Create your student account and verify your email to start."
+      : "Sign in with your verified email to continue.";
+    kicker.textContent = signup ? "Create account" : "Account access";
+    submit.textContent = signup ? "Create account" : "Sign in";
+    switchBtn.textContent = signup
+      ? "Already have an account? Sign in"
+      : "New here? Create an account";
+    forgotBtn.style.display = signup ? "none" : "block";
+    passInput.autocomplete = signup ? "new-password" : "current-password";
   }
+
   function friendly(e){
-    const map={
-      "auth/invalid-credential":"Email or password is incorrect.",
-      "auth/invalid-email":"Enter a valid email address.",
-      "auth/email-already-in-use":"An account already exists with this email.",
-      "auth/weak-password":"Use a password with at least 6 characters.",
-      "auth/user-not-found":"No account was found with this email.",
-      "auth/too-many-requests":"Too many attempts. Please wait a little and try again.",
-      "auth/network-request-failed":"Network problem. Check your internet connection.",
-      "auth/operation-not-allowed":"Email/password sign-in is not enabled in Firebase yet."
-    };
-    return map[e?.code]||e?.message||"Something went wrong. Please try again.";
+    const msg = String(e?.message || "").toLowerCase();
+    const code = String(e?.code || "").toLowerCase();
+
+    if(code.includes("invalid_credentials") || msg.includes("invalid login credentials"))
+      return "Email or password is incorrect.";
+    if(code.includes("invalid_email") || msg.includes("invalid email"))
+      return "Enter a valid email address.";
+    if(code.includes("user_already_exists") || code.includes("email_exists") || msg.includes("already registered"))
+      return "An account already exists with this email.";
+    if(code.includes("weak_password") || msg.includes("password should be at least"))
+      return "Use a stronger password.";
+    if(code.includes("email_not_confirmed") || msg.includes("email not confirmed"))
+      return "Please verify your email address before signing in.";
+    if(msg.includes("rate limit"))
+      return "Too many requests. Please wait a little and try again.";
+    if(msg.includes("failed to fetch") || msg.includes("network"))
+      return "Network problem. Check your internet connection.";
+    return e?.message || "Something went wrong. Please try again.";
   }
+
+  function showGate(){
+    loading.classList.add("hide");
+    gate.style.display = "grid";
+    appRoot.style.display = "none";
+  }
+
+  function showApp(user){
+    authUser = user || null;
+    if(!authUser){
+      showGate();
+      return;
+    }
+
+    loading.classList.add("hide");
+    loadUserState(authUser.id);
+
+    const displayName = authUser.user_metadata?.full_name || authUser.email || "Student";
+    const userEmail = document.getElementById("userEmail");
+    if(userEmail) userEmail.textContent = displayName;
+
+    gate.style.display = "none";
+    appRoot.style.display = "block";
+    page = "home";
+    render();
+  }
+
   async function submitAuth(){
-    const email=emailInput.value.trim(), password=passInput.value;
-    if(!email||!password){error.textContent="Enter your email and password.";return}
-    if(signup&&!nameInput.value.trim()){error.textContent="Enter your name.";return}
-    submit.disabled=true; submit.textContent=signup?"Creating…":"Signing in…"; error.textContent="";
+    const email = emailInput.value.trim();
+    const password = passInput.value;
+    const name = nameInput.value.trim();
+
+    if(!email || !password){
+      error.textContent = "Enter your email and password.";
+      return;
+    }
+    if(password.length < 6){
+      error.textContent = "Password must be at least 6 characters.";
+      return;
+    }
+    if(signup && !name){
+      error.textContent = "Enter your name.";
+      return;
+    }
+
+    submit.disabled = true;
+    submit.textContent = signup ? "Creating…" : "Signing in…";
+    error.textContent = "";
+
     try{
       if(signup){
-        const cred=await createUserWithEmailAndPassword(auth,email,password);
-        const nm=nameInput.value.trim();
-        if(nm) await updateProfile(cred.user,{displayName:nm});
+        const { data, error: signUpError } = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: name },
+            emailRedirectTo: redirectUrl
+          }
+        });
+
+        if(signUpError) throw signUpError;
+
+        // With email confirmation enabled, Supabase normally returns no session.
+        if(!data.session){
+          setMode(false);
+          emailInput.value = email;
+          passInput.value = "";
+          error.textContent = "Account created. Check your email and click the confirmation link before signing in.";
+        }else{
+          error.textContent = "Account created successfully.";
+        }
       }else{
-        await signInWithEmailAndPassword(auth,email,password);
+        const { data, error: signInError } = await supabaseClient.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if(signInError) throw signInError;
+
+        if(!data.user?.email_confirmed_at){
+          await supabaseClient.auth.signOut();
+          error.textContent = "Please verify your email first. Check your inbox or spam folder.";
+          return;
+        }
+
+        showApp(data.user);
       }
-    }catch(e){error.textContent=friendly(e)}
-    finally{submit.disabled=false;submit.textContent=signup?"Create account":"Sign in"}
+    }catch(e){
+      error.textContent = friendly(e);
+    }finally{
+      submit.disabled = false;
+      submit.textContent = signup ? "Create account" : "Sign in";
+    }
   }
-  submit.addEventListener("click",submitAuth);
-  switchBtn.addEventListener("click",()=>setMode(!signup));
-  [emailInput,passInput,nameInput].forEach(el=>el.addEventListener("keydown",e=>{if(e.key==="Enter")submitAuth()}));
-  forgotBtn.addEventListener("click",async()=>{
-    const email=emailInput.value.trim();
-    if(!email){error.textContent="Enter your email first, then choose forgot password.";return}
-    try{await sendPasswordResetEmail(auth,email);error.textContent="Password reset email sent. Check your inbox."}
-    catch(e){error.textContent=friendly(e)}
+
+  submit.addEventListener("click", submitAuth);
+  switchBtn.addEventListener("click", () => setMode(!signup));
+
+  [emailInput, passInput, nameInput].forEach(el => {
+    el.addEventListener("keydown", e => {
+      if(e.key === "Enter") submitAuth();
+    });
   });
 
-  window.studyForgeLogout=async()=>{await signOut(auth)};
+  forgotBtn.addEventListener("click", async () => {
+    const email = emailInput.value.trim();
 
-  onAuthStateChanged(auth,user=>{
-    authUser=user||null;
-    loading.classList.add("hide");
-    if(user){
-      loadUserState(user.uid);
-      document.getElementById("userEmail").textContent=user.displayName||user.email||"Student";
-      gate.style.display="none"; appRoot.style.display="block";
-      page="home";
-      render();
-    }else{
-      gate.style.display="grid"; appRoot.style.display="none";
+    if(!email){
+      error.textContent = "Enter your email first, then choose forgot password.";
+      return;
+    }
+
+    forgotBtn.disabled = true;
+    error.textContent = "";
+
+    try{
+      const { error: resetError } = await supabaseClient.auth.resetPasswordForEmail(
+        email,
+        { redirectTo: redirectUrl }
+      );
+      if(resetError) throw resetError;
+      error.textContent = "Password reset email sent. Check your inbox.";
+    }catch(e){
+      error.textContent = friendly(e);
+    }finally{
+      forgotBtn.disabled = false;
     }
   });
+
+  window.studyForgeLogout = async () => {
+    const { error: logoutError } = await supabaseClient.auth.signOut();
+    if(logoutError) toast("Could not log out. Please try again.");
+  };
+
+  // Never leave the user trapped behind the loading overlay.
+  const authSafetyTimer = setTimeout(() => {
+    if(!authUser) showGate();
+  }, 8000);
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if(event === "PASSWORD_RECOVERY"){
+      showGate();
+      error.textContent = "Password recovery link opened. You can reset your password from the recovery flow.";
+      return;
+    }
+    showApp(session?.user || null);
+  });
+
+  (async () => {
+    try{
+      const { data, error: sessionError } = await supabaseClient.auth.getSession();
+      if(sessionError) throw sessionError;
+      clearTimeout(authSafetyTimer);
+      showApp(data.session?.user || null);
+    }catch(e){
+      clearTimeout(authSafetyTimer);
+      loading.classList.add("hide");
+      showGate();
+      error.textContent = friendly(e);
+      console.error("StudyForge Supabase authentication error:", e);
+    }
+  })();
+
+  setMode(false);
 </script>
 </body>
 </html>
