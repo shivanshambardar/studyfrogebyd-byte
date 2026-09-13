@@ -29,6 +29,50 @@ Main Functions
 🎓 Student-Oriented Interface — The interface is designed specifically around focused academic study rather than a generic AI dashboard.
 Why I Built StudyForge
 
+📁 Project Structure
+StudyForge/
+│
+├── index.html
+├── system_prompt.md
+├── README.md
+└── assets/
+
+📖 Usage
+Create an account
+
+Register using your email address and password. Confirm your email before signing in.
+
+Start studying
+
+Import your study material and begin a quiz generated from the provided content.
+
+Review performance
+
+After completing a quiz, review your score, Bloom's Taxonomy performance, strengths, weaknesses, and recommendations.
+
+🔒 Security
+Authentication is handled through Supabase.
+Frontend applications must use only public/publishable credentials.
+Private keys and service-role credentials must never be committed to GitHub.
+Email confirmation helps verify newly registered accounts.
+🔮 Future Improvements
+
+Possible future improvements include:
+
+AI-powered question generation
+More advanced PDF extraction
+Personalized study plans
+Spaced repetition
+More question types
+Advanced analytics
+Cloud synchronization of quiz history
+Leaderboards and achievements
+Subject-wise progress tracking
+👨‍💻 Author
+
+Shivansh Ambardar
+
+BCA Student
 As a BCA student, I wanted to create something that was not just a basic college project, but something that could actually be useful for students in their daily studies and exam preparation.
 
 At the age of 19, I developed StudyForge to combine my understanding of web development, programming, databases/authentication, UI design, and academic problem-solving into one practical application.
