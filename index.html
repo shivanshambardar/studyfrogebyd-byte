@@ -677,7 +677,7 @@ textarea:focus{border-color:rgba(184,95,78,.5);box-shadow:0 0 0 4px rgba(184,95,
 .toast.show{opacity:1;transform:none}
 
 
-/* Supabase authentication */
+/* Firebase authentication */
 #app{display:none}
 #authGate{min-height:100vh;display:none;place-items:center;padding:28px;position:relative;z-index:5}
 .auth-shell{width:min(980px,100%);display:grid;grid-template-columns:1.05fr .95fr;border:1px solid rgba(32,35,31,.14);background:rgba(250,248,242,.74);backdrop-filter:blur(18px);box-shadow:0 30px 90px rgba(32,35,31,.13);border-radius:30px;overflow:hidden}
@@ -796,7 +796,7 @@ textarea:focus{border-color:rgba(184,95,78,.5);box-shadow:0 0 0 4px rgba(184,95,
 .focus-presets{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 18px}.focus-preset{border:1px solid var(--line);background:transparent;border-radius:999px;padding:8px 10px;font:500 9px "DM Mono"}
 .focus-preset.active{background:var(--ink);color:#fff}
 
-/* Supabase authentication */
+/* Firebase authentication */
 #app{display:none}
 #authGate{min-height:100vh;display:grid;place-items:center;padding:28px;position:relative;z-index:5}
 .auth-shell{width:min(980px,100%);display:grid;grid-template-columns:1.05fr .95fr;border:1px solid rgba(32,35,31,.14);background:rgba(250,248,242,.74);backdrop-filter:blur(18px);box-shadow:0 30px 90px rgba(32,35,31,.13);border-radius:30px;overflow:hidden}
@@ -1154,7 +1154,7 @@ setTimeout(()=>{
   setTimeout(()=>{
     $("welcome").remove();
     // Keep the flow separated: Welcome screen → Login → StudyForge app.
-    // Supabase auth state controls whether the login gate or app is shown.
+    // Firebase's auth state handler controls whether the login gate or app is shown.
     if(!authUser){
       $("authGate").style.display="grid";
       $("app").style.display="none";
@@ -1168,102 +1168,41 @@ setTimeout(()=>{
   const SUPABASE_URL = "https://ufnjklwmmofgeekzoxns.supabase.co";
   const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_dc4G2WlRABE4FjItZMdO1Q_vzJ2bCgp";
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-
-  const gate = document.getElementById("authGate");
-  const loading = document.getElementById("authLoading");
-  const appRoot = document.getElementById("app");
-  const submit = document.getElementById("authSubmit");
-  const switchBtn = document.getElementById("authSwitch");
-  const forgotBtn = document.getElementById("forgotBtn");
-  const error = document.getElementById("authError");
-  const nameField = document.getElementById("nameField");
-  const nameInput = document.getElementById("authName");
-  const emailInput = document.getElementById("authEmail");
-  const passInput = document.getElementById("authPassword");
-  const title = document.getElementById("authTitle");
-  const sub = document.getElementById("authSub");
-  const kicker = document.getElementById("authKicker");
-  let signup=false;
-
-  function setMode(next){
-    signup=next; error.textContent="";
-    nameField.style.display=signup?"block":"none";
-    title.textContent=signup?"Start your desk.":"Welcome back.";
-    sub.textContent=signup?"Create your student account and start building your study history.":"Sign in to continue to your study desk.";
-    kicker.textContent=signup?"Create account":"Account access";
-    submit.textContent=signup?"Create account":"Sign in";
-    switchBtn.textContent=signup?"Already have an account? Sign in":"New here? Create an account";
-    forgotBtn.style.display=signup?"none":"block";
-    passInput.autocomplete=signup?"new-password":"current-password";
-  }
-
-  function friendly(e){
-    const msg=(e&&e.message)||"Something went wrong. Please try again.";
-    const m=msg.toLowerCase();
-    if(m.includes("invalid login credentials"))return "Email or password is incorrect.";
-    if(m.includes("invalid email"))return "Enter a valid email address.";
-    if(m.includes("already registered")||m.includes("already been registered"))return "An account already exists with this email.";
-    if(m.includes("password")&&(m.includes("6")||m.includes("weak")||m.includes("characters")))return "Use a password with at least 6 characters.";
-    if(m.includes("rate limit")||m.includes("too many"))return "Too many attempts. Please wait a little and try again.";
-    if(m.includes("network")||m.includes("fetch"))return "Network problem. Check your internet connection.";
-    return msg;
-  }
-
+  const gate = document.getElementById("authGate"), loading = document.getElementById("authLoading"), appRoot = document.getElementById("app");
+  const submit = document.getElementById("authSubmit"), switchBtn = document.getElementById("authSwitch"), forgotBtn = document.getElementById("forgotBtn"), error = document.getElementById("authError");
+  const nameField = document.getElementById("nameField"), nameInput = document.getElementById("authName"), emailInput = document.getElementById("authEmail"), passInput = document.getElementById("authPassword");
+  const title = document.getElementById("authTitle"), sub = document.getElementById("authSub"), kicker = document.getElementById("authKicker");
+  let signup=false, authUser=null;
+  function setMode(next){ signup=next; error.textContent=""; nameField.style.display=signup?"block":"none"; title.textContent=signup?"Start your desk.":"Welcome back."; sub.textContent=signup?"Create your student account and verify your email to start.":"Sign in with your verified email to continue."; kicker.textContent=signup?"Create account":"Account access"; submit.textContent=signup?"Create account":"Sign in"; switchBtn.textContent=signup?"Already have an account? Sign in":"New here? Create an account"; forgotBtn.style.display=signup?"none":"block"; passInput.autocomplete=signup?"new-password":"current-password"; }
+  function friendly(e){ const m={"invalid_credentials":"Email or password is incorrect.","invalid_email":"Enter a valid email address.","email_exists":"An account already exists with this email.","weak_password":"Use a stronger password.","email_not_confirmed":"Please verify your email address before signing in."}; return m[e?.code]||e?.message||"Something went wrong. Please try again."; }
   async function submitAuth(){
     const email=emailInput.value.trim(), password=passInput.value;
     if(!email||!password){error.textContent="Enter your email and password.";return}
     if(signup&&!nameInput.value.trim()){error.textContent="Enter your name.";return}
-    if(password.length<6){error.textContent="Use a password with at least 6 characters.";return}
     submit.disabled=true; submit.textContent=signup?"Creating…":"Signing in…"; error.textContent="";
     try{
       if(signup){
         const nm=nameInput.value.trim();
-        const {data,error:e}=await supabaseClient.auth.signUp({email,password,options:{data:{full_name:nm}}});
-        if(e)throw e;
-        if(data.session){
-          error.textContent="Account created. Opening your desk…";
-        }else{
-          error.textContent="Account created. Check your email to confirm your account, then sign in.";
-          setMode(false);
-        }
-      }else{
-        const {error:e}=await supabaseClient.auth.signInWithPassword({email,password});
-        if(e)throw e;
+        const {data,error:e}=await supabaseClient.auth.signUp({email,password,options:{data:{full_name:nm},emailRedirectTo:window.location.origin+window.location.pathname}});
+        if(e) throw e;
+        if(data.session){ error.textContent="Account created successfully."; }
+        else { error.textContent="Account created. Check your email and click the confirmation link before signing in."; setMode(false); emailInput.value=email; passInput.value=""; }
+      } else {
+        const {data,error:e}=await supabaseClient.auth.signInWithPassword({email,password});
+        if(e) throw e;
+        if(data.user && !data.user.email_confirmed_at){ await supabaseClient.auth.signOut(); error.textContent="Please verify your email address first. Check your inbox or spam folder."; return; }
       }
-    }catch(e){error.textContent=friendly(e)}
-    finally{submit.disabled=false;submit.textContent=signup?"Create account":"Sign in"}
+    }catch(e){ error.textContent=friendly(e); }
+    finally{submit.disabled=false;submit.textContent=signup?"Create account":"Sign in";}
   }
-  submit.addEventListener("click",submitAuth);
-  switchBtn.addEventListener("click",()=>setMode(!signup));
+  submit.addEventListener("click",submitAuth); switchBtn.addEventListener("click",()=>setMode(!signup));
   [emailInput,passInput,nameInput].forEach(el=>el.addEventListener("keydown",e=>{if(e.key==="Enter")submitAuth()}));
-  forgotBtn.addEventListener("click",async()=>{
-    const email=emailInput.value.trim();
-    if(!email){error.textContent="Enter your email first, then choose forgot password.";return}
-    try{
-      const {error:e}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+window.location.pathname});
-      if(e)throw e;
-      error.textContent="Password reset email sent. Check your inbox.";
-    }catch(e){error.textContent=friendly(e)}
-  });
+  forgotBtn.addEventListener("click",async()=>{ const email=emailInput.value.trim(); if(!email){error.textContent="Enter your email first, then choose forgot password.";return} const {error:e}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+window.location.pathname}); error.textContent=e?friendly(e):"Password reset email sent. Check your inbox."; });
   window.studyForgeLogout=async()=>{const {error:e}=await supabaseClient.auth.signOut();if(e)toast("Could not log out. Please try again.")};
-
-  async function handleSession(session){
-    authUser=session?.user||null;
-    loading.classList.add("hide");
-    if(authUser){
-      loadUserState(authUser.id);
-      const nm=authUser.user_metadata?.full_name;
-      document.getElementById("userEmail").textContent=nm||authUser.email||"Student";
-      gate.style.display="none"; appRoot.style.display="block"; page="home"; render();
-    }else{
-      gate.style.display="grid"; appRoot.style.display="none";
-    }
-  }
-  supabaseClient.auth.onAuthStateChange((_event,session)=>{handleSession(session)});
-  supabaseClient.auth.getSession().then(({data,error:e})=>{
-    if(e){console.error(e);error.textContent="Could not connect to the login service.";loading.classList.add("hide");gate.style.display="grid";return}
-    handleSession(data.session);
-  });
+  async function handleSession(session){ authUser=session?.user||null; loading.classList.add("hide"); if(authUser){ loadUserState(authUser.id); const nm=authUser.user_metadata?.full_name; document.getElementById("userEmail").textContent=nm||authUser.email||"Student"; gate.style.display="none"; appRoot.style.display="block"; page="home"; render(); } else { gate.style.display="grid"; appRoot.style.display="none"; } }
+  supabaseClient.auth.onAuthStateChange((_event,session)=>handleSession(session));
+  supabaseClient.auth.getSession().then(({data,error:e})=>{if(e){error.textContent=e.message;loading.classList.add("hide");gate.style.display="grid";appRoot.style.display="none";}else handleSession(data.session);});
+  setMode(false);
 </script>
 </body>
 </html>
